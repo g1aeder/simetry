@@ -2,6 +2,7 @@ use crate::iracing::flags::{driver_black_flags, global_flags, start_flags};
 use crate::iracing::{
     BitField, CarPositions, Header, Value, VarData, VarHeader, VarHeaders, VarType,
 };
+use crate::iracing::session_info::SessionInfo;
 use crate::{Moment, Pedals, RacingFlags};
 use std::borrow::Cow;
 use std::fmt::{Debug, Formatter};
@@ -9,14 +10,13 @@ use std::sync::Arc;
 use uom::si::angular_velocity::revolution_per_minute;
 use uom::si::f64::{AngularVelocity, Velocity};
 use uom::si::velocity::meter_per_second;
-use yaml_rust::Yaml;
 
 #[derive(Clone)]
 pub struct SimState {
     header: Arc<Header>,
     variables: Arc<VarHeaders>,
     raw_data: Vec<u8>,
-    session_info: Arc<Yaml>,
+    session_info: Arc<SessionInfo>,
 }
 
 impl Moment for SimState {
@@ -36,7 +36,7 @@ impl Moment for SimState {
 
     fn vehicle_max_engine_rotation_speed(&self) -> Option<AngularVelocity> {
         Some(AngularVelocity::new::<revolution_per_minute>(
-            self.session_info()["DriverInfo"]["DriverCarRedLine"].as_f64()?,
+            self.session_info().driver_info.driver_car_red_line,
         ))
     }
 
@@ -66,7 +66,7 @@ impl Moment for SimState {
 
     fn shift_point(&self) -> Option<AngularVelocity> {
         Some(AngularVelocity::new::<revolution_per_minute>(
-            self.session_info()["DriverInfo"]["DriverCarSLShiftRPM"].as_f64()?,
+            self.session_info().driver_info.driver_car_sl_shift_rpm,
         ))
     }
 
@@ -94,13 +94,12 @@ impl Moment for SimState {
     }
 
     fn vehicle_unique_id(&self) -> Option<Cow<str>> {
-        let driver_info = &self.session_info["DriverInfo"];
-        let player_car_idx = driver_info["DriverCarIdx"].as_i64()?;
-        let player_driver = driver_info["Drivers"]
-            .as_vec()?
+        let driver_info = &self.session_info.driver_info;
+        let player_car_idx = driver_info.driver_car_idx;
+        let player_driver = driver_info.drivers
             .iter()
-            .find(|driver| driver["CarIdx"].as_i64() == Some(player_car_idx))?;
-        let vehicle_unique_id = player_driver["CarID"].as_i64()?;
+            .find(|driver| driver.car_idx == player_car_idx)?;
+        let vehicle_unique_id = player_driver.car_id;
         Some(format!("{vehicle_unique_id}").into())
     }
 
@@ -144,7 +143,7 @@ impl SimState {
         header: Arc<Header>,
         variables: Arc<VarHeaders>,
         raw_data: Vec<u8>,
-        session_info: Arc<Yaml>,
+        session_info: Arc<SessionInfo>,
     ) -> Self {
         Self {
             header,
@@ -178,7 +177,7 @@ impl SimState {
         &self.variables
     }
 
-    pub fn session_info(&self) -> &Yaml {
+    pub fn session_info(&self) -> &SessionInfo {
         &self.session_info
     }
 }
